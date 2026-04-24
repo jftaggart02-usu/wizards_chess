@@ -12,6 +12,7 @@ const int EM_PIN = 9;
 
 // Parameters
 const int JS_DEADZONE = 200;  // Joystick deadzone. For reference, joystick values are from 0 to 1023, and the middle value is 512.
+const int MOTOR_DELAY_US = 4000;   // The time it takes for the motors to complete one full step.
 
 // Function prototypes
 void fullStep(int duration, bool cw, int motor_id);
@@ -77,12 +78,11 @@ void loop() {
     }
 
     // Move the motors and update the axis positions
-    int delay_us = 2000;
     if (move_y && move_x) {
-      fullStepBoth(delay_us, move_x > 0, move_y > 0);
+      fullStepBoth(MOTOR_DELAY_US, move_x > 0, move_y > 0);
     }
     else if (move_x) {
-      fullStepMX(delay_us, move_x > 0);
+      fullStepMX(MOTOR_DELAY_US, move_x > 0);
       if (move_x > 0) {
         x_pos += 1;
       }
@@ -91,7 +91,7 @@ void loop() {
       }
     }
     else if (move_y) {
-      fullStepMY(delay_us, move_y > 0);
+      fullStepMY(MOTOR_DELAY_US, move_y > 0);
       if (move_y > 0) {
         y_pos += 1;
       }
@@ -100,7 +100,7 @@ void loop() {
       }
     }
     else {
-      delayMicroseconds(delay_us);
+      delayMicroseconds(MOTOR_DELAY_US);
     }
 
     // Print the current axis positions
