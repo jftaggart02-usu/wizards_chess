@@ -5,13 +5,9 @@ const int Y_BTN = 4;
 const int X_BTN = 5;
 const int MY_DIR = 6;
 const int MY_STEP = 7;
-const int JS_RX = A0;
-const int JS_RY = A1;
-const int JS_BTN = 8;
 const int EM_PIN = 9;
 
 // Parameters
-const int JS_DEADZONE = 200;  // Joystick deadzone. For reference, joystick values are from 0 to 1023, and the middle value is 512.
 const int MOTOR_DELAY_US = 4000;   // The time it takes for the motors to complete one full step.
 
 // Function prototypes
@@ -20,8 +16,11 @@ void fullStepMX(int duration, bool cw);
 void fullStepMY(int duration, bool cw);
 void fullStepBoth(int duration, bool cw_x, bool cw_y);
 void zeroAxes();
-int readFilteredX(int pin);
-int readFilteredY(int pin); 
+int getDesiredX(int gridx, int stepx, int minx);
+int getDesiredY(int gridy, int stepy, int miny);
+void goToPositionX(int &x_pos, int desiredX);
+void goToPositionY(int &y_pos, int desiredY);
+
 
 void setup() {
   pinMode(MX_DIR, OUTPUT);
@@ -30,12 +29,12 @@ void setup() {
   pinMode(MY_STEP, OUTPUT);
   pinMode(X_BTN, INPUT_PULLUP);
   pinMode(Y_BTN, INPUT_PULLUP);
-  pinMode(JS_BTN, INPUT_PULLUP);
   pinMode(EM_PIN, OUTPUT);
   digitalWrite(MX_DIR, LOW);
   digitalWrite(MX_STEP, LOW);
   digitalWrite(MY_DIR, LOW);
   digitalWrite(MY_STEP, LOW);
+  analogWrite(EM_PIN, 0);
   Serial.begin(9600);
   delay(2000);
 }
@@ -48,70 +47,74 @@ void loop() {
   int x_pos = 0; // units: number of clockwise full steps from origin
   int y_pos = 0; // units: number of clockwise full steps from origin
 
-  // Control the stepper motors while printing out the current x-y position
-  while (true) {
-    // Activate the electromagnet if the joystick button is pressed
-    int js_btn = digitalRead(JS_BTN);
-    if (js_btn == LOW) {  // button pressed
-      analogWrite(EM_PIN, 53);  // 5 Volts (electromagnet supply voltage is 24 volts)
-    }
-    else {
-      analogWrite(EM_PIN, 0);
-    }
+  int minx = -1228;
+  int maxx = 106;
+  int stepx = (maxx-minx)/7;
+  int miny = -1754;
+  int maxy = -627;
+  int stepy = (maxy-miny)/6;
+  
+  Serial.print("Step X = ");
+  Serial.println(stepx);
+  Serial.print("Step Y = ");
+  Serial.println(stepy);
 
-    // Determine how we should move the motors based on joystick position
-    int js_x = readFilteredX(JS_RX);  // 0-1023. Center is 512
-    int js_y = readFilteredY(JS_RY);
-    int move_x = 0;  // 0 = don't move. Positive = move CW. Negative = move CCW
-    if (js_x > 512 + JS_DEADZONE/2) {
-      move_x = 1;
-    }
-    else if (js_x < 512 - JS_DEADZONE/2) {
-      move_x = -1;
-    }
-    int move_y = 0;  // 0 = don't move. Positive = move CW. Negative = move CCW
-    if (js_y > 512 + JS_DEADZONE/2) {
-      move_y = 1;
-    }
-    else if (js_y < 512 - JS_DEADZONE/2) {
-      move_y = -1;
-    }
+  // First, go to position (0,0)
+  int desiredX = getDesiredX(0, stepx, minx);
+  int desiredY = getDesiredY(0, stepy, miny);
+  
+  goToPositionX(x_pos, desiredX);
+  goToPositionY(y_pos, desiredY);
 
-    // Move the motors and update the axis positions
-    if (move_y && move_x) {
-      fullStepBoth(MOTOR_DELAY_US, move_x > 0, move_y > 0);
-    }
-    else if (move_x) {
-      fullStepMX(MOTOR_DELAY_US, move_x > 0);
-      if (move_x > 0) {
-        x_pos += 1;
-      }
-      else {
-        x_pos -= 1;
-      }
-    }
-    else if (move_y) {
-      fullStepMY(MOTOR_DELAY_US, move_y > 0);
-      if (move_y > 0) {
-        y_pos += 1;
-      }
-      else {
-        y_pos -= 1;
-      }
-    }
-    else {
-      delayMicroseconds(MOTOR_DELAY_US);
-    }
+  // Next, go to position (7, 6)
+  analogWrite(EM_PIN, 60);
+  desiredX = getDesiredX(7, stepx, minx);
+  desiredY = getDesiredY(6, stepy, miny);
 
-    // Print the current axis positions
-    Serial.print("(x,y): (");
-    Serial.print(x_pos);
-    Serial.print(", ");
-    Serial.print(y_pos);
-    Serial.println(")");
+  goToPositionX(x_pos, desiredX);
+  goToPositionY(y_pos, desiredY);
+  analogWrite(EM_PIN, 0);
 
+  while (true);
+
+}
+
+int getDesiredX(int gridx, int stepx, int minx) {
+  return gridx*stepx + minx;
+}
+
+int getDesiredY(int gridy, int stepy, int miny) {
+  return gridy*stepy + miny;
+}
+
+void goToPositionX(int &x_pos, int desiredX) {
+  if (x_pos < desiredX) {
+    while (x_pos < desiredX) {
+      fullStepMX(MOTOR_DELAY_US, true);
+      x_pos++;
+    }
   }
+  else if (x_pos > desiredX) {
+    while (x_pos > desiredX) {
+      fullStepMX(MOTOR_DELAY_US, false);
+      x_pos--;
+    }
+  }
+}
 
+void goToPositionY(int &y_pos, int desiredY) {
+  if (y_pos < desiredY) {
+    while (y_pos < desiredY) {
+      fullStepMY(MOTOR_DELAY_US, true);
+      y_pos++;
+    }
+  }
+  else if (y_pos > desiredY) {
+    while (y_pos > desiredY) {
+      fullStepMY(MOTOR_DELAY_US, false);
+      y_pos--;
+    }
+  }
 }
 
 /*
